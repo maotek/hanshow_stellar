@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#e9e6dc">
+  <title>MAOWATCH Time Sync</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #e9e6dc;
+      --ink: #171815;
+      --muted: #66685f;
+      --line: #bab8ad;
+      --accent: #d8ff45;
+      --danger: #b53a2f;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background:
+        radial-gradient(circle at 20% 10%, rgba(255,255,255,.9), transparent 32%),
+        linear-gradient(135deg, #d8d5cb, var(--paper));
+      color: var(--ink);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    main {
+      width: min(100%, 440px);
+      border: 2px solid var(--ink);
+      border-radius: 24px;
+      background: rgba(239, 237, 228, .92);
+      box-shadow: 10px 12px 0 var(--ink);
+      overflow: hidden;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 18px 20px;
+      border-bottom: 2px solid var(--ink);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1rem;
+      letter-spacing: .13em;
+    }
+
+    #connection {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--muted);
+      font-size: .75rem;
+    }
+
+    #connection::before {
+      width: 9px;
+      height: 9px;
+      border: 1px solid var(--ink);
+      border-radius: 50%;
+      background: var(--line);
+      content: "";
+    }
+
+    #connection.connected::before { background: var(--accent); }
+
+    .face {
+      padding: 26px 24px 22px;
+      text-align: center;
+    }
+
+    #clock {
+      font-size: clamp(3.25rem, 17vw, 5.25rem);
+      font-weight: 700;
+      line-height: .95;
+      letter-spacing: -.08em;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #date {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: .9rem;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .controls {
+      display: grid;
+      gap: 12px;
+      padding: 0 24px 24px;
+    }
+
+    button {
+      width: 100%;
+      min-height: 52px;
+      border: 2px solid var(--ink);
+      border-radius: 12px;
+      background: transparent;
+      color: var(--ink);
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button.primary {
+      background: var(--ink);
+      color: var(--paper);
+    }
+
+    button.sync {
+      background: var(--accent);
+      color: var(--ink);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: .4;
+    }
+
+    button:not(:disabled):active { transform: translateY(2px); }
+
+    .log {
+      min-height: 88px;
+      padding: 14px 18px;
+      border-top: 1px solid var(--line);
+      background: rgba(255,255,255,.35);
+      color: var(--muted);
+      font-size: .72rem;
+      line-height: 1.55;
+      overflow-wrap: anywhere;
+    }
+
+    .log.error { color: var(--danger); }
+
+    footer {
+      padding: 12px 18px 16px;
+      color: var(--muted);
+      font-size: .65rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>MAOWATCH</h1>
+      <span id="connection">DISCONNECTED</span>
+    </header>
+
+    <section class="face" aria-live="polite">
+      <div id="clock">--:--</div>
+      <div id="date">Waiting for device</div>
+    </section>
+
+    <section class="controls">
+      <button id="connect" class="primary" type="button">Connect watch</button>
+      <button id="sync" class="sync" type="button" disabled>Set current time</button>
+    </section>
+
+    <div id="log" class="log">Ready. Connect to MAOWATCH, then set the time.</div>
+    <footer>BLE service 1F10 · characteristic 1F1F</footer>
+  </main>
+
+  <script>
+    "use strict";
+
+    const SERVICE_UUID = "00001f10-0000-1000-8000-00805f9b34fb";
+    const CHARACTERISTIC_UUID = "00001f1f-0000-1000-8000-00805f9b34fb";
+
+    const connectionEl = document.querySelector("#connection");
+    const connectButton = document.querySelector("#connect");
+    const syncButton = document.querySelector("#sync");
+    const clockEl = document.querySelector("#clock");
+    const dateEl = document.querySelector("#date");
+    const logEl = document.querySelector("#log");
+
+    let device;
+    let timeCharacteristic;
+
+    function updateClock() {
+      const now = new Date();
+      clockEl.textContent = new Intl.DateTimeFormat([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+      }).format(now);
+      dateEl.textContent = new Intl.DateTimeFormat([], {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric"
+      }).format(now);
+    }
+
+    function log(message, isError = false) {
+      logEl.textContent = message;
+      logEl.classList.toggle("error", isError);
+    }
+
+    function setConnected(connected) {
+      connectionEl.textContent = connected ? "CONNECTED" : "DISCONNECTED";
+      connectionEl.classList.toggle("connected", connected);
+      syncButton.disabled = !connected;
+      connectButton.textContent = connected ? "Reconnect watch" : "Connect watch";
+    }
+
+    function onDisconnected() {
+      timeCharacteristic = undefined;
+      setConnected(false);
+      log("Watch disconnected.");
+    }
+
+    async function connect() {
+      if (!navigator.bluetooth) {
+        throw new Error(
+          "Web Bluetooth is unavailable. On iPhone, open this page in Bluefy."
+        );
+      }
+
+      log("Choose MAOWATCH in the Bluetooth picker…");
+      device = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: [SERVICE_UUID]
+      });
+
+      device.addEventListener("gattserverdisconnected", onDisconnected);
+      const server = await device.gatt.connect();
+      const service = await server.getPrimaryService(SERVICE_UUID);
+      timeCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+
+      setConnected(true);
+      log(`Connected to ${device.name || "MAOWATCH"}. Ready to synchronize.`);
+    }
+
+    function makeTimePacket(now = new Date()) {
+      // The firmware derives HH:MM from epoch % 86400, so it expects an epoch
+      // shifted to local wall-clock time instead of an ordinary UTC epoch.
+      const localEpoch = (
+        Math.floor(now.getTime() / 1000) -
+        now.getTimezoneOffset() * 60
+      ) >>> 0;
+      const year = now.getFullYear();
+
+      return new Uint8Array([
+        0xdd,
+        (localEpoch >>> 24) & 0xff,
+        (localEpoch >>> 16) & 0xff,
+        (localEpoch >>> 8) & 0xff,
+        localEpoch & 0xff,
+        (year >>> 8) & 0xff,
+        year & 0xff,
+        now.getMonth() + 1,
+        now.getDate(),
+        now.getDay()
+      ]);
+    }
+
+    function toHex(bytes) {
+      return [...bytes]
+        .map(value => value.toString(16).padStart(2, "0"))
+        .join(" ")
+        .toUpperCase();
+    }
+
+    async function write(bytes) {
+      if (typeof timeCharacteristic.writeValueWithResponse === "function") {
+        await timeCharacteristic.writeValueWithResponse(bytes);
+      } else {
+        await timeCharacteristic.writeValue(bytes);
+      }
+    }
+
+    async function syncTime() {
+      if (!timeCharacteristic) {
+        throw new Error("Connect to MAOWATCH first.");
+      }
+
+      const packet = makeTimePacket();
+      syncButton.disabled = true;
+      log(`Sending ${toHex(packet)}…`);
+
+      await write(packet);
+      await write(new Uint8Array([0xe2]));
+
+      updateClock();
+      syncButton.disabled = false;
+      log(`Time synchronized. Sent: ${toHex(packet)} · refresh: E2`);
+    }
+
+    connectButton.addEventListener("click", async () => {
+      try {
+        await connect();
+      } catch (error) {
+        setConnected(false);
+        log(error.message || String(error), true);
+      }
+    });
+
+    syncButton.addEventListener("click", async () => {
+      try {
+        await syncTime();
+      } catch (error) {
+        syncButton.disabled = !timeCharacteristic;
+        log(error.message || String(error), true);
+      }
+    });
+
+    updateClock();
+    setInterval(updateClock, 1000);
+  </script>
+</body>
+</html>
