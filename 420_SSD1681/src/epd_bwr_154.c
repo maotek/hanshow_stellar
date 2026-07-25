@@ -1,0 +1,166 @@
+#include <stdint.h>
+#include "tl_common.h"
+#include "main.h"
+#include "epd.h"
+#include "epd_spi.h"
+#include "epd_bwr_154.h"
+#include "drivers.h"
+
+// SSD1681/SSD1683-compatible 400 x 300 monochrome EPD controller.
+// The controller RAM is 50 bytes wide and 300 gate lines high.
+#define BWR_154_LUT_LENGTH 50
+
+static uint8_t LUT_bwr_154_part[] = {
+    0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    BWR_154_LUT_LENGTH, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x22, 0x22, 0x22, 0x22, 0x22, 0x22,
+    0x00, 0x00, 0x00,
+};
+
+_attribute_ram_code_ uint8_t EPD_BWR_154_read_temp(void)
+{
+    uint8_t epd_temperature;
+
+    EPD_WriteCmd(0x12);
+    EPD_CheckStatus_inverted(100);
+
+    EPD_WriteCmd(0x01);
+    EPD_WriteData(0x2b);
+    EPD_WriteData(0x01);
+    EPD_WriteData(0x00);
+
+    EPD_WriteCmd(0x11);
+    EPD_WriteData(0x03);
+
+    EPD_WriteCmd(0x44);
+    EPD_WriteData(0x00);
+    EPD_WriteData(0x31);
+
+    EPD_WriteCmd(0x45);
+    EPD_WriteData(0x00);
+    EPD_WriteData(0x00);
+    EPD_WriteData(0x2b);
+    EPD_WriteData(0x01);
+
+    EPD_WriteCmd(0x3c);
+    EPD_WriteData(0x05);
+    EPD_WriteCmd(0x18);
+    EPD_WriteData(0x80);
+    EPD_WriteCmd(0x22);
+    EPD_WriteData(0xb1);
+    EPD_WriteCmd(0x20);
+    EPD_CheckStatus_inverted(100);
+
+    EPD_WriteCmd(0x1b);
+    epd_temperature = EPD_SPI_read();
+    EPD_SPI_read();
+    WaitMs(5);
+
+    EPD_WriteCmd(0x10);
+    EPD_WriteData(0x01);
+    return epd_temperature;
+}
+
+_attribute_ram_code_ uint8_t EPD_BWR_154_Display(
+    unsigned char *image, int size, uint8_t full_or_partial)
+{
+    uint8_t epd_temperature;
+    int i, x, y, bit;
+    uint8_t value;
+
+    EPD_WriteCmd(0x12);
+    EPD_CheckStatus_inverted(100);
+
+    EPD_WriteCmd(0x01);
+    EPD_WriteData(0x2b);
+    EPD_WriteData(0x01);
+    EPD_WriteData(0x00);
+
+    EPD_WriteCmd(0x11);
+    EPD_WriteData(0x03);
+    EPD_WriteCmd(0x44);
+    EPD_WriteData(0x00);
+    EPD_WriteData(0x31);
+    EPD_WriteCmd(0x45);
+    EPD_WriteData(0x00);
+    EPD_WriteData(0x00);
+    EPD_WriteData(0x2b);
+    EPD_WriteData(0x01);
+
+    EPD_WriteCmd(0x3c);
+    EPD_WriteData(0x05);
+    EPD_WriteCmd(0x18);
+    EPD_WriteData(0x80);
+    EPD_WriteCmd(0x22);
+    EPD_WriteData(0xb1);
+    EPD_WriteCmd(0x20);
+    EPD_CheckStatus_inverted(100);
+
+    EPD_WriteCmd(0x1b);
+    epd_temperature = EPD_SPI_read();
+    EPD_SPI_read();
+    WaitMs(5);
+
+    EPD_WriteCmd(0x4e);
+    EPD_WriteData(0x00);
+    EPD_WriteCmd(0x4f);
+    EPD_WriteData(0x00);
+    EPD_WriteData(0x00);
+    EPD_WriteCmd(0x24);
+    for (y = 0; y < epd_height; y++)
+    {
+        for (x = 0; x < epd_width; x += 8)
+        {
+            value = 0;
+            for (bit = 0; bit < 8; bit++)
+            {
+                if (image[(y / 8) * epd_width + x + bit] & (1 << (y & 7)))
+                    value |= 0x80 >> bit;
+            }
+            EPD_WriteData(~value);
+        }
+    }
+
+    EPD_WriteCmd(0x4e);
+    EPD_WriteData(0x00);
+    EPD_WriteCmd(0x4f);
+    EPD_WriteData(0x00);
+    EPD_WriteData(0x00);
+    EPD_WriteCmd(0x26);
+    // This panel uses active-high chromatic RAM: zero keeps the red plane clear.
+    for (i = 0; i < epd_transfer_size; i++)
+        EPD_WriteData(0x00);
+
+    if (!full_or_partial)
+    {
+        EPD_WriteCmd(0x32);
+        for (i = 0; i < sizeof(LUT_bwr_154_part); i++)
+            EPD_WriteData(LUT_bwr_154_part[i]);
+    }
+
+    EPD_WriteCmd(0x22);
+    EPD_WriteData(0xc7);
+    EPD_WriteCmd(0x20);
+    return epd_temperature;
+}
+
+_attribute_ram_code_ void EPD_BWR_154_set_sleep(void)
+{
+    EPD_WriteCmd(0x10);
+    EPD_WriteData(0x01);
+}

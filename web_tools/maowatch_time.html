@@ -122,6 +122,36 @@
       color: var(--ink);
     }
 
+    button.disconnect {
+      border-color: var(--danger);
+      color: var(--danger);
+    }
+
+    .firmware {
+      display: grid;
+      gap: 10px;
+      padding-top: 4px;
+      border-top: 1px solid var(--line);
+    }
+
+    .firmware label {
+      color: var(--muted);
+      font-size: .72rem;
+    }
+
+    input[type="file"] {
+      width: 100%;
+      color: var(--muted);
+      font: inherit;
+      font-size: .72rem;
+    }
+
+    progress {
+      width: 100%;
+      height: 12px;
+      accent-color: var(--accent);
+    }
+
     button:disabled {
       cursor: not-allowed;
       opacity: .4;
@@ -164,7 +194,14 @@
 
     <section class="controls">
       <button id="connect" class="primary" type="button">Connect watch</button>
+      <button id="disconnect" class="disconnect" type="button" disabled>Disconnect watch</button>
       <button id="sync" class="sync" type="button" disabled>Set current time</button>
+      <div class="firmware">
+        <label for="firmware-file">Firmware update (.bin)</label>
+        <input id="firmware-file" type="file" accept=".bin,application/octet-stream">
+        <progress id="ota-progress" value="0" max="100"></progress>
+        <button id="upload" type="button" disabled>Upload firmware OTA</button>
+      </div>
     </section>
 
     <div id="log" class="log">Ready. Connect to MAOWATCH, then set the time.</div>
@@ -176,16 +213,28 @@
 
     const SERVICE_UUID = "00001f10-0000-1000-8000-00805f9b34fb";
     const CHARACTERISTIC_UUID = "00001f1f-0000-1000-8000-00805f9b34fb";
+    const OTA_SERVICE_UUID = "0000221f-0000-1000-8000-00805f9b34fb";
+    const OTA_CHARACTERISTIC_UUID = "0000331f-0000-1000-8000-00805f9b34fb";
+    const OTA_BANK_START = 0x20000;
+    const OTA_MAX_SIZE = 0x20000;
 
     const connectionEl = document.querySelector("#connection");
     const connectButton = document.querySelector("#connect");
+    const disconnectButton = document.querySelector("#disconnect");
     const syncButton = document.querySelector("#sync");
+    const firmwareFile = document.querySelector("#firmware-file");
+    const uploadButton = document.querySelector("#upload");
+    const otaProgress = document.querySelector("#ota-progress");
     const clockEl = document.querySelector("#clock");
     const dateEl = document.querySelector("#date");
     const logEl = document.querySelector("#log");
 
     let device;
     let timeCharacteristic;
+    let otaCharacteristic;
+    let selectedFirmware;
+    let otaNotificationResolver;
+    let uploading = false;
 
     function updateClock() {
       const now = new Date();
@@ -211,13 +260,18 @@
       connectionEl.textContent = connected ? "CONNECTED" : "DISCONNECTED";
       connectionEl.classList.toggle("connected", connected);
       syncButton.disabled = !connected;
+      uploadButton.disabled = !connected || !selectedFirmware || uploading;
+      disconnectButton.disabled = !connected || uploading;
       connectButton.textContent = connected ? "Reconnect watch" : "Connect watch";
     }
 
     function onDisconnected() {
       timeCharacteristic = undefined;
+      otaCharacteristic = undefined;
       setConnected(false);
-      log("Watch disconnected.");
+      if (!uploading) {
+        log("Watch disconnected.");
+      }
     }
 
     async function connect() {
@@ -230,16 +284,36 @@
       log("Choose MAOWATCH in the Bluetooth picker…");
       device = await navigator.bluetooth.requestDevice({
         acceptAllDevices: true,
-        optionalServices: [SERVICE_UUID]
+        optionalServices: [SERVICE_UUID, OTA_SERVICE_UUID]
       });
 
       device.addEventListener("gattserverdisconnected", onDisconnected);
       const server = await device.gatt.connect();
       const service = await server.getPrimaryService(SERVICE_UUID);
       timeCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+      const otaService = await server.getPrimaryService(OTA_SERVICE_UUID);
+      otaCharacteristic = await otaService.getCharacteristic(OTA_CHARACTERISTIC_UUID);
+      await otaCharacteristic.startNotifications();
+      otaCharacteristic.addEventListener(
+        "characteristicvaluechanged",
+        event => {
+          if (otaNotificationResolver) {
+            otaNotificationResolver(new Uint8Array(event.target.value.buffer.slice(0)));
+            otaNotificationResolver = undefined;
+          }
+        }
+      );
 
       setConnected(true);
       log(`Connected to ${device.name || "MAOWATCH"}. Ready to synchronize.`);
+    }
+
+    function disconnect() {
+      if (device?.gatt?.connected) {
+        device.gatt.disconnect();
+      } else {
+        onDisconnected();
+      }
     }
 
     function makeTimePacket(now = new Date()) {
@@ -280,6 +354,112 @@
       }
     }
 
+    async function writeOta(bytes) {
+      if (!otaCharacteristic) {
+        throw new Error("OTA characteristic is unavailable.");
+      }
+      if (typeof otaCharacteristic.writeValueWithResponse === "function") {
+        await otaCharacteristic.writeValueWithResponse(bytes);
+      } else {
+        await otaCharacteristic.writeValue(bytes);
+      }
+    }
+
+    function addressBytes(command, address) {
+      return new Uint8Array([
+        command,
+        (address >>> 24) & 0xff,
+        (address >>> 16) & 0xff,
+        (address >>> 8) & 0xff,
+        address & 0xff
+      ]);
+    }
+
+    function firmwareChecksum(bytes) {
+      let checksum = 0;
+      for (let index = 0; index < OTA_MAX_SIZE; index++) {
+        checksum = (checksum + (index < bytes.length ? bytes[index] : 0xff)) & 0xffff;
+      }
+      return checksum;
+    }
+
+    function waitForOtaNotification(timeoutMs = 10000) {
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          otaNotificationResolver = undefined;
+          reject(new Error("Timed out waiting for the OTA checksum."));
+        }, timeoutMs);
+        otaNotificationResolver = value => {
+          clearTimeout(timeout);
+          resolve(value);
+        };
+      });
+    }
+
+    async function uploadFirmware() {
+      if (!selectedFirmware || !otaCharacteristic) {
+        throw new Error("Select firmware and connect to MAOWATCH first.");
+      }
+
+      const bytes = selectedFirmware;
+      const checksum = firmwareChecksum(bytes);
+      uploading = true;
+      otaProgress.value = 0;
+      setConnected(true);
+      firmwareFile.disabled = true;
+      syncButton.disabled = true;
+
+      try {
+        log(`Erasing OTA bank · checksum ${checksum.toString(16).padStart(4, "0").toUpperCase()}…`);
+        for (let address = OTA_BANK_START; address < OTA_BANK_START + OTA_MAX_SIZE; address += 0x1000) {
+          await writeOta(addressBytes(0x01, address));
+          otaProgress.value = ((address - OTA_BANK_START) / OTA_MAX_SIZE) * 10;
+        }
+
+        for (let offset = 0; offset < bytes.length; offset += 0x100) {
+          const page = bytes.subarray(offset, Math.min(offset + 0x100, bytes.length));
+          for (let part = 0; part < page.length; part += 240) {
+            const chunk = page.subarray(part, Math.min(part + 240, page.length));
+            const packet = new Uint8Array(chunk.length + 1);
+            packet[0] = 0x03;
+            packet.set(chunk, 1);
+            await writeOta(packet);
+          }
+          await writeOta(addressBytes(0x02, OTA_BANK_START + offset));
+          otaProgress.value = 10 + ((offset + page.length) / bytes.length) * 80;
+        }
+
+        // Populate the existing firmware's final-check buffer without changing
+        // firmware: stage expected CRC at offsets 5/6, copy it to out_buffer,
+        // then ask the watch to calculate and notify its flash checksum.
+        await writeOta(new Uint8Array([
+          0x03, 0, 0, 0, 0, 0, (checksum >>> 8) & 0xff, checksum & 0xff
+        ]));
+        await writeOta(addressBytes(0x05, 0));
+        const notification = waitForOtaNotification();
+        await writeOta(new Uint8Array([0x06]));
+        const result = await notification;
+        const remoteChecksum = (result[1] << 8) | result[2];
+        if (result[0] !== 0x07 || remoteChecksum !== checksum) {
+          throw new Error(
+            `OTA checksum mismatch: watch ${remoteChecksum.toString(16).padStart(4, "0")}, file ${checksum.toString(16).padStart(4, "0")}.`
+          );
+        }
+
+        otaProgress.value = 95;
+        log("Checksum verified. Installing firmware; the watch will reboot…");
+        await writeOta(new Uint8Array([
+          0x07, 0xc0, 0x01, 0xce, 0xed,
+          (checksum >>> 8) & 0xff, checksum & 0xff
+        ]));
+        otaProgress.value = 100;
+      } finally {
+        uploading = false;
+        firmwareFile.disabled = false;
+        setConnected(Boolean(device?.gatt?.connected));
+      }
+    }
+
     async function syncTime() {
       if (!timeCharacteristic) {
         throw new Error("Connect to MAOWATCH first.");
@@ -306,11 +486,50 @@
       }
     });
 
+    disconnectButton.addEventListener("click", disconnect);
+
     syncButton.addEventListener("click", async () => {
       try {
         await syncTime();
       } catch (error) {
         syncButton.disabled = !timeCharacteristic;
+        log(error.message || String(error), true);
+      }
+    });
+
+    firmwareFile.addEventListener("change", async () => {
+      selectedFirmware = undefined;
+      otaProgress.value = 0;
+      const file = firmwareFile.files[0];
+      if (!file) {
+        setConnected(Boolean(device?.gatt?.connected));
+        return;
+      }
+
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const signature = String.fromCharCode(...bytes.slice(8, 12));
+      if (signature !== "KNLT") {
+        firmwareFile.value = "";
+        setConnected(Boolean(device?.gatt?.connected));
+        log("Not a Telink firmware .bin: KNLT signature is missing.", true);
+        return;
+      }
+      if (bytes.length > OTA_MAX_SIZE) {
+        firmwareFile.value = "";
+        setConnected(Boolean(device?.gatt?.connected));
+        log(`Firmware is too large (${bytes.length} bytes; maximum ${OTA_MAX_SIZE}).`, true);
+        return;
+      }
+
+      selectedFirmware = bytes;
+      setConnected(Boolean(device?.gatt?.connected));
+      log(`Selected ${file.name} · ${bytes.length} bytes.`);
+    });
+
+    uploadButton.addEventListener("click", async () => {
+      try {
+        await uploadFirmware();
+      } catch (error) {
         log(error.message || String(error), true);
       }
     });
