@@ -10,6 +10,10 @@ const OTA_SERVICE_UUID = "0000221f-0000-1000-8000-00805f9b34fb";
 const OTA_CHARACTERISTIC_UUID = "0000331f-0000-1000-8000-00805f9b34fb";
 const OTA_BANK_START = 0x20000;
 const OTA_MAX_SIZE = 0x20000;
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const IMAGE_CHUNK_SIZE = IS_IOS ? 16 : 220; // Four-byte image header + payload.
+const OTA_CHUNK_SIZE = IS_IOS ? 19 : 240;   // One-byte OTA header + payload.
 
 const $ = selector => document.querySelector(selector);
 const connectionEl = $("#connection");
@@ -155,17 +159,14 @@ async function connect() {
   device.addEventListener("gattserverdisconnected", onDisconnected);
   const server = await device.gatt.connect();
 
-  const [timeService, epdService, otaService] = await Promise.all([
-    server.getPrimaryService(SERVICE_UUID),
-    server.getPrimaryService(EPD_SERVICE_UUID),
-    server.getPrimaryService(OTA_SERVICE_UUID)
-  ]);
-
-  [timeCharacteristic, epdCharacteristic, otaCharacteristic] = await Promise.all([
-    timeService.getCharacteristic(CHARACTERISTIC_UUID),
-    epdService.getCharacteristic(EPD_CHARACTERISTIC_UUID),
-    otaService.getCharacteristic(OTA_CHARACTERISTIC_UUID)
-  ]);
+  // Bluefy/Core Bluetooth is sensitive to overlapping GATT operations, so
+  // discover services and characteristics one at a time on every platform.
+  const timeService = await server.getPrimaryService(SERVICE_UUID);
+  timeCharacteristic = await timeService.getCharacteristic(CHARACTERISTIC_UUID);
+  const epdService = await server.getPrimaryService(EPD_SERVICE_UUID);
+  epdCharacteristic = await epdService.getCharacteristic(EPD_CHARACTERISTIC_UUID);
+  const otaService = await server.getPrimaryService(OTA_SERVICE_UUID);
+  otaCharacteristic = await otaService.getCharacteristic(OTA_CHARACTERISTIC_UUID);
 
   await otaCharacteristic.startNotifications();
   otaCharacteristic.addEventListener("characteristicvaluechanged", event => {
@@ -174,14 +175,10 @@ async function connect() {
     otaNotificationResolver = undefined;
   });
 
-  try {
-    await epdCharacteristic.startNotifications();
-  } catch (_) {
-    // Uploads use writes with response, so notifications are helpful but optional.
-  }
-
   setConnected(true);
-  log(`Connected to ${device.name || "MAOWATCH"}. Display studio ready.`);
+  log(`Connected to ${device.name || "MAOWATCH"}. ${
+    IS_IOS ? "iPhone-safe BLE transfer enabled (20-byte writes)." : "Fast BLE transfer enabled."
+  }`);
 }
 
 function disconnect() {
@@ -816,7 +813,7 @@ function canvasToPlanes(canvas) {
 }
 
 async function uploadPlane(plane, selector, start, end) {
-  const chunkSize = 220;
+  const chunkSize = IMAGE_CHUNK_SIZE;
   for (let offset = 0; offset < plane.length; offset += chunkSize) {
     const chunk = plane.subarray(offset, Math.min(offset + chunkSize, plane.length));
     const packet = new Uint8Array(chunk.length + 4);
@@ -912,8 +909,8 @@ async function uploadFirmware() {
 
     for (let offset = 0; offset < bytes.length; offset += 0x100) {
       const page = bytes.subarray(offset, Math.min(offset + 0x100, bytes.length));
-      for (let part = 0; part < page.length; part += 240) {
-        const chunk = page.subarray(part, Math.min(part + 240, page.length));
+      for (let part = 0; part < page.length; part += OTA_CHUNK_SIZE) {
+        const chunk = page.subarray(part, Math.min(part + OTA_CHUNK_SIZE, page.length));
         const packet = new Uint8Array(chunk.length + 1);
         packet[0] = 0x03;
         packet.set(chunk, 1);
