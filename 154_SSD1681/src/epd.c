@@ -82,7 +82,7 @@ _attribute_ram_code_ void EPD_Display(unsigned char *image, unsigned char *red_i
     gpio_write(EPD_RESET, 1);
     WaitMs(10);
 
-    epd_temperature = EPD_BWR_154_Display(image, size, full_or_partial);
+    epd_temperature = EPD_BWR_154_Display(image, red_image, size, full_or_partial);
 
     epd_temperature_is_read = 1;
     epd_update_state = 1;
@@ -176,17 +176,18 @@ static void draw_watch_digit(OBDISP *display, int x, int y, uint8_t digit)
 
     // Segment order: top, upper-right, lower-right, bottom,
     // lower-left, upper-left, middle.
-    if (mask & 0x01) obdRectangle(display, x + 5, y,      x + 27, y + 5,  1, 1);
-    if (mask & 0x02) obdRectangle(display, x + 28, y + 5,  x + 33, y + 29, 1, 1);
-    if (mask & 0x04) obdRectangle(display, x + 28, y + 36, x + 33, y + 60, 1, 1);
-    if (mask & 0x08) obdRectangle(display, x + 5, y + 60, x + 27, y + 65, 1, 1);
-    if (mask & 0x10) obdRectangle(display, x,     y + 36, x + 5,  y + 60, 1, 1);
-    if (mask & 0x20) obdRectangle(display, x,     y + 5,  x + 5,  y + 29, 1, 1);
-    if (mask & 0x40) obdRectangle(display, x + 5, y + 30, x + 27, y + 35, 1, 1);
+    if (mask & 0x01) obdRectangle(display, x + 6, y,      x + 31, y + 6,  1, 1);
+    if (mask & 0x02) obdRectangle(display, x + 32, y + 6,  x + 38, y + 35, 1, 1);
+    if (mask & 0x04) obdRectangle(display, x + 32, y + 45, x + 38, y + 74, 1, 1);
+    if (mask & 0x08) obdRectangle(display, x + 6, y + 74, x + 31, y + 80, 1, 1);
+    if (mask & 0x10) obdRectangle(display, x,     y + 45, x + 6,  y + 74, 1, 1);
+    if (mask & 0x20) obdRectangle(display, x,     y + 6,  x + 6,  y + 35, 1, 1);
+    if (mask & 0x40) obdRectangle(display, x + 6, y + 36, x + 31, y + 44, 1, 1);
 }
 
 _attribute_ram_code_ void epd_display(struct date_time _time, uint16_t battery_mv, int16_t temperature, uint8_t full_or_partial)
 {
+    int i;
     uint8_t battery_level;
     uint8_t battery_width;
     static const char *weekday[] = {
@@ -209,37 +210,32 @@ _attribute_ram_code_ void epd_display(struct date_time _time, uint16_t battery_m
             weekday[_time.tm_week % 7],
             _time.tm_day, _time.tm_month, _time.tm_year);
     obdWriteStringCustom(&obd, (GFXfont *)&Dialog_plain_16,
-                         18, 22, (char *)buff, 1);
-    obdRectangle(&obd, 16, 31, 183, 32, 1, 1);
+                         18, 19, (char *)buff, 1);
+    obdRectangle(&obd, 10, 27, 189, 28, 1, 1);
 
-    // Large custom seven-segment numerals use most of the square display.
-    draw_watch_digit(&obd, 13, 48, _time.tm_hour / 10);
-    draw_watch_digit(&obd, 51, 48, _time.tm_hour % 10);
-    obdRectangle(&obd, 92, 70, 97, 75, 1, 1);
-    obdRectangle(&obd, 92, 91, 97, 96, 1, 1);
-    draw_watch_digit(&obd, 104, 48, _time.tm_min / 10);
-    draw_watch_digit(&obd, 142, 48, _time.tm_min % 10);
+    // Enlarged seven-segment numerals use the space freed by the debug voltage.
+    draw_watch_digit(&obd, 4, 35, _time.tm_hour / 10);
+    draw_watch_digit(&obd, 44, 35, _time.tm_hour % 10);
+    obdRectangle(&obd, 94, 58, 99, 63, 1, 1);
+    obdRectangle(&obd, 94, 86, 99, 91, 1, 1);
+    draw_watch_digit(&obd, 109, 35, _time.tm_min / 10);
+    draw_watch_digit(&obd, 149, 35, _time.tm_min % 10);
 
-    // A restrained status row keeps useful information without crowding.
-    obdRectangle(&obd, 16, 132, 183, 133, 1, 1);
-    obdRectangle(&obd, 37, 148, 64, 163, 1, 0);
-    obdRectangle(&obd, 34, 152, 37, 159, 1, 1);
+    // Battery and temperature now share the full-width status row.
+    obdRectangle(&obd, 10, 124, 189, 125, 1, 1);
+    obdRectangle(&obd, 21, 141, 48, 156, 1, 0);
+    obdRectangle(&obd, 18, 145, 21, 152, 1, 1);
     battery_width = (battery_level * 24) / 100;
     if (battery_width)
-        obdRectangle(&obd, 39, 150, 38 + battery_width, 161, 1, 1);
+        obdRectangle(&obd, 23, 143, 22 + battery_width, 154, 1, 1);
 
     sprintf(buff, "%d%%", battery_level);
     obdWriteStringCustom(&obd, (GFXfont *)&Dialog_plain_16,
-                         69, 163, (char *)buff, 1);
+                         54, 156, (char *)buff, 1);
 
     sprintf(buff, "%d'C", EPD_read_temp());
     obdWriteStringCustom(&obd, (GFXfont *)&Dialog_plain_16,
-                         125, 163, (char *)buff, 1);
-
-    // Raw PB7 divider reading for battery ADC calibration/debugging.
-    sprintf(buff, "%dmV", battery_mv);
-    obdWriteStringCustom(&obd, (GFXfont *)&Dialog_plain_16,
-                         72, 181, (char *)buff, 1);
+                         132, 156, (char *)buff, 1);
 
     // Bluetooth state is hidden for now to keep battery and temperature centered.
     // obdWriteStringCustom(&obd, (GFXfont *)&Dialog_plain_16,
@@ -247,9 +243,15 @@ _attribute_ram_code_ void epd_display(struct date_time _time, uint16_t battery_m
 
     sprintf(buff, "MAOWATCH-%02X", mac_public[0]);
     obdWriteStringCustom(&obd, (GFXfont *)&Dialog_plain_16,
-                         43, 199, (char *)buff, 1);
+                         43, 187, (char *)buff, 1);
 
     FixBuffer(epd_temp, epd_buffer, epd_width, epd_height);
+
+    // Keep the known-good drawing path and invert only the controller-ready
+    // monochrome plane. The separate red plane remains clear in the driver.
+    for (i = 0; i < epd_buffer_size; i++)
+        epd_buffer[i] ^= 0xff;
+
     EPD_Display(epd_buffer, NULL, epd_buffer_size, full_or_partial);
 }
 

@@ -76,7 +76,8 @@ _attribute_ram_code_ uint8_t EPD_BWR_154_read_temp(void)
 }
 
 _attribute_ram_code_ uint8_t EPD_BWR_154_Display(
-    unsigned char *image, int size, uint8_t full_or_partial)
+    unsigned char *image, unsigned char *red_image, int size,
+    uint8_t full_or_partial)
 {
     uint8_t epd_temperature;
     int i;
@@ -128,7 +129,7 @@ _attribute_ram_code_ uint8_t EPD_BWR_154_Display(
     EPD_WriteData(0x00);
     EPD_WriteCmd(0x26);
     for (i = 0; i < size; i++)
-        EPD_WriteData(0x00);
+        EPD_WriteData(red_image ? red_image[i] : 0x00);
 
     if (!full_or_partial)
     {

@@ -4,16 +4,19 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#e9e6dc">
-  <title>MAOWATCH Time Sync</title>
+  <title>MAOWATCH Studio</title>
   <style>
     :root {
       color-scheme: light;
-      --paper: #e9e6dc;
+      --paper: #efede4;
+      --paper-deep: #ddd9cc;
       --ink: #171815;
       --muted: #66685f;
-      --line: #bab8ad;
+      --line: #aaa99f;
       --accent: #d8ff45;
-      --danger: #b53a2f;
+      --red: #d7352d;
+      --danger: #a92f28;
+      --radius: 16px;
     }
 
     * { box-sizing: border-box; }
@@ -21,38 +24,43 @@
     body {
       min-height: 100vh;
       margin: 0;
-      display: grid;
-      place-items: center;
       padding: 24px;
+      overflow-x: hidden;
       background:
-        radial-gradient(circle at 20% 10%, rgba(255,255,255,.9), transparent 32%),
+        radial-gradient(circle at 15% 5%, rgba(255,255,255,.92), transparent 28%),
         linear-gradient(135deg, #d8d5cb, var(--paper));
       color: var(--ink);
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     }
 
-    main {
-      width: min(100%, 440px);
+    button, input, select { font: inherit; }
+
+    .app {
+      width: min(1180px, 100%);
+      max-width: 100%;
+      min-width: 0;
+      margin: 0 auto;
+      overflow: hidden;
       border: 2px solid var(--ink);
       border-radius: 24px;
-      background: rgba(239, 237, 228, .92);
+      background: rgba(239, 237, 228, .96);
       box-shadow: 10px 12px 0 var(--ink);
-      overflow: hidden;
     }
 
     header {
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      padding: 18px 20px;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 22px;
       border-bottom: 2px solid var(--ink);
+      background: rgba(239, 237, 228, .96);
     }
 
-    h1 {
-      margin: 0;
-      font-size: 1rem;
-      letter-spacing: .13em;
-    }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { margin-bottom: 0; font-size: 1rem; letter-spacing: .14em; }
+    h2 { margin-bottom: 6px; font-size: 1.05rem; }
+    h3 { margin-bottom: 10px; font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; }
 
     #connection {
       display: inline-flex;
@@ -73,99 +81,287 @@
 
     #connection.connected::before { background: var(--accent); }
 
-    .face {
-      padding: 26px 24px 22px;
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 304px;
+    }
+
+    .layout > * { min-width: 0; }
+    .studio { min-width: 0; padding: 26px; }
+    .sidebar {
+      min-width: 0;
+      border-left: 2px solid var(--ink);
+      background: rgba(220, 217, 206, .26);
+    }
+
+    .intro {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .intro p, .hint {
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: .72rem;
+      line-height: 1.5;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(270px, .9fr) minmax(350px, 1.1fr);
+      gap: 20px;
+      align-items: start;
+    }
+
+    .panel {
+      min-width: 0;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,.34);
+      box-shadow: 0 8px 22px rgba(23, 24, 21, .06);
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .panel-head h3 { margin: 0; }
+
+    .dropzone {
+      display: grid;
+      place-items: center;
+      min-height: 76px;
+      margin-bottom: 12px;
+      padding: 12px;
+      border: 1px dashed var(--line);
+      border-radius: 12px;
+      color: var(--muted);
+      cursor: pointer;
       text-align: center;
     }
 
-    #clock {
-      font-size: clamp(3.25rem, 17vw, 5.25rem);
-      font-weight: 700;
-      line-height: .95;
-      letter-spacing: -.08em;
-      font-variant-numeric: tabular-nums;
+    .dropzone.dragging { border-color: var(--ink); background: var(--accent); color: var(--ink); }
+    .dropzone input { display: none; }
+
+    .crop-stage {
+      display: none;
+      width: 100%;
+      overflow: hidden;
+      border: 2px solid var(--ink);
+      border-radius: 12px;
+      background: #ccc;
+      line-height: 0;
+      touch-action: none;
     }
 
-    #date {
-      margin-top: 14px;
-      color: var(--muted);
-      font-size: .9rem;
-      letter-spacing: .08em;
-      text-transform: uppercase;
+    .crop-stage.visible { display: block; }
+    #crop-canvas { display: block; width: 100%; height: auto; cursor: crosshair; }
+
+    .screen-wrap {
+      position: relative;
+      width: min(100%, 400px);
+      margin: 0 auto 12px;
+      border: 2px solid var(--ink);
+      border-radius: 10px;
+      background: #fff;
+      line-height: 0;
+      box-shadow: 4px 5px 0 var(--ink);
+      touch-action: none;
     }
 
-    .controls {
+    #screen-canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      image-rendering: pixelated;
+      cursor: default;
+    }
+
+    #screen-canvas.qr-active { cursor: grab; }
+    #screen-canvas.qr-dragging { cursor: grabbing; }
+    #screen-canvas.drawing { cursor: crosshair; }
+
+    .grid {
       display: grid;
-      gap: 12px;
-      padding: 0 24px 24px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .grid.one { grid-template-columns: 1fr; }
+    .wide { grid-column: 1 / -1; }
+
+    label.field {
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-size: .68rem;
+    }
+
+    input[type="text"], input[type="url"], select {
+      width: 100%;
+      min-width: 0;
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: rgba(255,255,255,.65);
+      color: var(--ink);
+      padding: 7px 9px;
+    }
+
+    input[type="range"] { width: 100%; accent-color: var(--ink); }
+
+    .range-label {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
     }
 
     button {
-      width: 100%;
-      min-height: 52px;
+      min-height: 42px;
       border: 2px solid var(--ink);
-      border-radius: 12px;
+      border-radius: 10px;
       background: transparent;
       color: var(--ink);
-      font: inherit;
       font-weight: 700;
       cursor: pointer;
     }
 
-    button.primary {
-      background: var(--ink);
-      color: var(--paper);
+    button.small { min-height: 34px; padding: 4px 10px; font-size: .68rem; }
+    button.primary { background: var(--ink); color: var(--paper); }
+    button.accent { background: var(--accent); color: var(--ink); }
+    button.red { border-color: var(--danger); color: var(--danger); }
+    button:disabled { cursor: not-allowed; opacity: .38; }
+    button:not(:disabled):active { transform: translateY(2px); }
+    button:not(:disabled):hover { background-color: rgba(216, 255, 69, .45); }
+    button.primary:not(:disabled):hover { background-color: #30312d; }
+
+    .button-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+    .tool-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 7px;
+      margin-top: 12px;
     }
 
-    button.sync {
-      background: var(--accent);
-      color: var(--ink);
+    .tool-strip button { min-width: 0; min-height: 36px; padding: 5px; font-size: .66rem; }
+
+    .layer-box {
+      margin-top: 10px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
     }
 
-    button.disconnect {
-      border-color: var(--danger);
-      color: var(--danger);
+    .layer-box summary {
+      cursor: pointer;
+      font-size: .78rem;
+      font-weight: 700;
     }
+
+    .layer-controls { display: grid; gap: 10px; padding-top: 12px; }
+
+    .color-meter {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      align-items: center;
+      gap: 10px;
+      margin: 12px 0 2px;
+      color: var(--muted);
+      font-size: .64rem;
+    }
+
+    .meter-bar {
+      display: flex;
+      height: 9px;
+      overflow: hidden;
+      border: 1px solid var(--ink);
+      border-radius: 99px;
+      background: #fff;
+    }
+
+    .meter-bar span { display: block; height: 100%; }
+    #meter-black { background: #111; }
+    #meter-white { background: #fff; }
+    #meter-red { background: #e1261c; }
+
+    .display-actions {
+      margin-top: 12px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(239, 237, 228, .94);
+    }
+
+    .qr-box {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+    }
+
+    .qr-box summary {
+      cursor: pointer;
+      font-size: .78rem;
+      font-weight: 700;
+    }
+
+    .qr-controls { display: grid; gap: 10px; padding-top: 12px; }
+
+    .palette-key {
+      display: flex;
+      gap: 12px;
+      color: var(--muted);
+      font-size: .65rem;
+    }
+
+    .swatch { display: inline-block; width: 9px; height: 9px; margin-right: 4px; border: 1px solid var(--ink); }
+    .swatch.black { background: #000; }
+    .swatch.white { background: #fff; }
+    .swatch.red { background: #e1261c; }
+
+    .device-card {
+      padding: 20px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    #clock {
+      margin: 8px 0 5px;
+      font-size: 3.2rem;
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: -.08em;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #date { color: var(--muted); font-size: .68rem; line-height: 1.5; text-transform: uppercase; }
+    .device-card .button-row { margin-top: 14px; }
+    .device-card button { width: 100%; }
+
+    .upload-progress { width: 100%; height: 10px; margin-top: 10px; accent-color: var(--accent); }
 
     .firmware {
       display: grid;
-      gap: 10px;
-      padding-top: 4px;
-      border-top: 1px solid var(--line);
+      gap: 9px;
+      padding: 20px;
+      border-bottom: 1px solid var(--line);
     }
 
-    .firmware label {
-      color: var(--muted);
-      font-size: .72rem;
-    }
-
-    input[type="file"] {
-      width: 100%;
-      color: var(--muted);
-      font: inherit;
-      font-size: .72rem;
-    }
-
-    progress {
-      width: 100%;
-      height: 12px;
-      accent-color: var(--accent);
-    }
-
-    button:disabled {
-      cursor: not-allowed;
-      opacity: .4;
-    }
-
-    button:not(:disabled):active { transform: translateY(2px); }
+    input[type="file"] { width: 100%; color: var(--muted); font-size: .68rem; }
+    progress { width: 100%; accent-color: var(--accent); }
 
     .log {
-      min-height: 88px;
-      padding: 14px 18px;
-      border-top: 1px solid var(--line);
-      background: rgba(255,255,255,.35);
+      min-height: 112px;
+      padding: 16px 20px;
+      background: rgba(255,255,255,.32);
       color: var(--muted);
-      font-size: .72rem;
+      font-size: .68rem;
       line-height: 1.55;
       overflow-wrap: anywhere;
     }
@@ -175,367 +371,293 @@
     footer {
       padding: 12px 18px 16px;
       color: var(--muted);
-      font-size: .65rem;
+      font-size: .62rem;
       text-align: center;
+    }
+
+    @media (max-width: 840px) {
+      body { padding: 12px; }
+      .app { box-shadow: 5px 6px 0 var(--ink); }
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { border-top: 2px solid var(--ink); border-left: 0; }
+      .workspace { grid-template-columns: 1fr; }
+      .intro { align-items: start; flex-direction: column; }
+      .screen-wrap { width: min(100%, 440px); }
+    }
+
+    @media (max-width: 600px) {
+      body { padding: 0; background: var(--paper); }
+      .app { width: 100%; border-right: 0; border-left: 0; border-radius: 0; box-shadow: none; }
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        padding: 14px 16px;
+      }
+      h1 { font-size: .82rem; }
+      #connection { max-width: 125px; overflow: hidden; white-space: nowrap; }
+      .studio { padding: 16px 12px; }
+      .panel { padding: 12px; }
+      .grid { grid-template-columns: 1fr; }
+      .wide { grid-column: auto; }
+      .workspace { gap: 14px; }
+      .intro { margin-bottom: 14px; }
+      .intro p { max-width: 38ch; }
+      .tool-strip { grid-template-columns: repeat(2, 1fr); }
+      button { min-height: 48px; }
+      .panel-head button { min-height: 36px; }
+      .display-actions {
+        position: sticky;
+        bottom: 8px;
+        z-index: 10;
+        box-shadow: 0 -6px 18px rgba(23,24,21,.12);
+      }
+      .sidebar { border-left: 0; }
     }
   </style>
 </head>
 <body>
-  <main>
+  <main class="app">
     <header>
-      <h1>MAOWATCH</h1>
+      <h1>MAOWATCH / STUDIO</h1>
       <span id="connection">DISCONNECTED</span>
     </header>
 
-    <section class="face" aria-live="polite">
-      <div id="clock">--:--</div>
-      <div id="date">Waiting for device</div>
-    </section>
+    <div class="layout">
+      <section class="studio">
+        <div class="intro">
+          <div>
+            <h2>Display composer</h2>
+            <p>Crop an image, tune the three-color conversion, and place a scannable QR layer.</p>
+          </div>
+          <div class="palette-key" aria-label="Display palette">
+            <span><i class="swatch black"></i>black</span>
+            <span><i class="swatch white"></i>white</span>
+            <span><i class="swatch red"></i>red</span>
+          </div>
+        </div>
 
-    <section class="controls">
-      <button id="connect" class="primary" type="button">Connect watch</button>
-      <button id="disconnect" class="disconnect" type="button" disabled>Disconnect watch</button>
-      <button id="sync" class="sync" type="button" disabled>Set current time</button>
-      <div class="firmware">
-        <label for="firmware-file">Firmware update (.bin)</label>
-        <input id="firmware-file" type="file" accept=".bin,application/octet-stream">
-        <progress id="ota-progress" value="0" max="100"></progress>
-        <button id="upload" type="button" disabled>Upload firmware OTA</button>
-      </div>
-    </section>
+        <div class="workspace">
+          <section class="panel">
+            <div class="panel-head">
+              <h3>1 · Source & crop</h3>
+              <button id="reset-crop" class="small" type="button" disabled>Reset crop</button>
+            </div>
 
-    <div id="log" class="log">Ready. Connect to MAOWATCH, then set the time.</div>
-    <footer>BLE service 1F10 · characteristic 1F1F</footer>
+            <label id="dropzone" class="dropzone" for="image-file">
+              <span><strong>Choose or drop an image</strong><br>PNG, JPEG, WebP, GIF or BMP</span>
+              <input id="image-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp">
+            </label>
+
+            <div id="crop-stage" class="crop-stage">
+              <canvas id="crop-canvas" width="600" height="400"></canvas>
+            </div>
+            <p class="hint" style="margin-top:10px">Drag inside the square to move it. Drag a corner to resize. The crop is always 1:1 for the 200×200 display.</p>
+
+            <div class="tool-strip" aria-label="Image transform controls">
+              <button id="rotate-left" type="button" disabled>↶ Rotate</button>
+              <button id="rotate-right" type="button" disabled>Rotate ↷</button>
+              <button id="flip-image" type="button" disabled>↔ Flip</button>
+              <button id="reset-look" type="button" disabled>Reset look</button>
+            </div>
+
+            <div class="grid" style="margin-top:14px">
+              <label class="field">Palette
+                <select id="palette">
+                  <option value="bwr" selected>Black · white · red</option>
+                  <option value="bw">Black · white</option>
+                </select>
+              </label>
+              <label class="field">Dithering
+                <select id="dither">
+                  <option value="atkinson" selected>Atkinson</option>
+                  <option value="floyd">Floyd–Steinberg</option>
+                  <option value="bayer">Bayer 4×4</option>
+                  <option value="none">None / nearest</option>
+                </select>
+              </label>
+              <label class="field">
+                <span class="range-label"><span>Brightness</span><output id="brightness-value">0</output></span>
+                <input id="brightness" type="range" min="-80" max="80" value="0">
+              </label>
+              <label class="field">
+                <span class="range-label"><span>Contrast</span><output id="contrast-value">0</output></span>
+                <input id="contrast" type="range" min="-80" max="80" value="0">
+              </label>
+              <label class="field wide">
+                <span class="range-label"><span>Red sensitivity</span><output id="red-value">0</output></span>
+                <input id="red-bias" type="range" min="-80" max="80" value="0">
+              </label>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h3>2 · Watch canvas</h3>
+              <button id="clear-canvas" class="small" type="button">Clear</button>
+            </div>
+
+            <div class="screen-wrap">
+              <canvas id="screen-canvas" width="200" height="200" aria-label="Watch display preview"></canvas>
+            </div>
+
+            <div class="color-meter" aria-live="polite">
+              <span id="color-stats">Black 0% · White 100% · Red 0%</span>
+              <span class="meter-bar" aria-hidden="true">
+                <span id="meter-black" style="width:0%"></span>
+                <span id="meter-white" style="width:100%"></span>
+                <span id="meter-red" style="width:0%"></span>
+              </span>
+            </div>
+
+            <details class="qr-box" open>
+              <summary>QR code layer</summary>
+              <div class="qr-controls">
+                <label class="field">Text or URL
+                  <input id="qr-text" type="text" placeholder="https://example.com">
+                </label>
+                <div class="grid">
+                  <label class="field">QR color
+                    <select id="qr-color">
+                      <option value="black" selected>Black</option>
+                      <option value="red">Red</option>
+                    </select>
+                  </label>
+                  <label class="field">Error correction
+                    <select id="qr-level">
+                      <option value="L">Low</option>
+                      <option value="M" selected>Medium</option>
+                      <option value="Q">Quartile</option>
+                      <option value="H">High</option>
+                    </select>
+                  </label>
+                  <label class="field wide">
+                    <span class="range-label"><span>QR size</span><output id="qr-size-value">112 px</output></span>
+                    <input id="qr-size" type="range" min="48" max="192" step="1" value="112">
+                  </label>
+                </div>
+                <div class="button-row">
+                  <button id="make-qr" class="accent" type="button">Place QR</button>
+                  <button id="remove-qr" type="button" disabled>Remove QR</button>
+                </div>
+                <button id="center-qr" type="button" disabled>Center QR on canvas</button>
+                <p class="hint">Drag the QR directly on the watch canvas. Its quiet zone is added automatically.</p>
+              </div>
+            </details>
+
+            <details class="layer-box" open>
+              <summary>Drawing layer</summary>
+              <div class="layer-controls">
+                <div class="grid">
+                  <label class="field">Canvas tool
+                    <select id="canvas-tool">
+                      <option value="select" selected>Move layers</option>
+                      <option value="draw">Draw</option>
+                      <option value="erase">Erase drawing</option>
+                    </select>
+                  </label>
+                  <label class="field">Brush color
+                    <select id="brush-color">
+                      <option value="black" selected>Black</option>
+                      <option value="red">Red</option>
+                      <option value="white">White</option>
+                    </select>
+                  </label>
+                  <label class="field wide">
+                    <span class="range-label"><span>Brush size</span><output id="brush-size-value">4 px</output></span>
+                    <input id="brush-size" type="range" min="1" max="32" value="4">
+                  </label>
+                </div>
+                <div class="button-row">
+                  <button id="undo-drawing" type="button" disabled>Undo stroke</button>
+                  <button id="clear-drawing" type="button" disabled>Clear drawing</button>
+                </div>
+                <p class="hint">Choose Draw or Erase, then use a finger, mouse, or pen directly on the watch canvas.</p>
+              </div>
+            </details>
+
+            <details class="layer-box" open>
+              <summary>Text layer</summary>
+              <div class="layer-controls">
+                <label class="field">Text
+                  <input id="text-content" type="text" maxlength="40" placeholder="MAOWATCH">
+                </label>
+                <div class="grid">
+                  <label class="field">Color
+                    <select id="text-color">
+                      <option value="black" selected>Black</option>
+                      <option value="red">Red</option>
+                      <option value="white">White</option>
+                    </select>
+                  </label>
+                  <label class="field">Typeface
+                    <select id="text-font">
+                      <option value="mono" selected>Mono bold</option>
+                      <option value="sans">Sans bold</option>
+                      <option value="serif">Serif bold</option>
+                    </select>
+                  </label>
+                  <label class="field wide">
+                    <span class="range-label"><span>Text size</span><output id="text-size-value">24 px</output></span>
+                    <input id="text-size" type="range" min="8" max="64" value="24">
+                  </label>
+                </div>
+                <div class="button-row">
+                  <button id="place-text" class="accent" type="button">Place text</button>
+                  <button id="remove-text" type="button" disabled>Remove text</button>
+                </div>
+                <p class="hint">Text is a draggable layer too. White text is useful on dark photographs.</p>
+              </div>
+            </details>
+
+            <div class="grid one" style="margin-top:14px">
+              <label class="field">Image refresh
+                <select id="refresh-mode">
+                  <option value="1" selected>Full refresh</option>
+                  <option value="0">Partial refresh</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="display-actions">
+              <progress id="image-progress" class="upload-progress" value="0" max="100"></progress>
+              <div class="button-row" style="margin-top:8px">
+                <button id="send-image" class="primary" type="button" disabled>Show image</button>
+                <button id="show-watch" type="button" disabled>Show watch</button>
+              </div>
+              <button id="download-preview" type="button" style="width:100%;margin-top:8px">Download preview PNG</button>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <aside class="sidebar">
+        <section class="device-card">
+          <h3>Watch</h3>
+          <div id="clock">--:--</div>
+          <div id="date">Waiting for device</div>
+          <div class="button-row">
+            <button id="connect" class="primary" type="button">Connect</button>
+            <button id="disconnect" class="red" type="button" disabled>Disconnect</button>
+          </div>
+          <button id="sync" class="accent" type="button" style="margin-top:8px" disabled>Set current time</button>
+        </section>
+
+        <section class="firmware">
+          <h3>Firmware update</h3>
+          <label class="field" for="firmware-file">Telink firmware (.bin)</label>
+          <input id="firmware-file" type="file" accept=".bin,application/octet-stream">
+          <progress id="ota-progress" value="0" max="100"></progress>
+          <button id="upload" type="button" disabled>Upload firmware OTA</button>
+        </section>
+
+        <div id="log" class="log" role="status">Ready. Connect to MAOWATCH to synchronize time or send a canvas.</div>
+        <footer>200×200 BWR · BLE image + OTA</footer>
+      </aside>
+    </div>
   </main>
 
-  <script>
-    "use strict";
-
-    const SERVICE_UUID = "00001f10-0000-1000-8000-00805f9b34fb";
-    const CHARACTERISTIC_UUID = "00001f1f-0000-1000-8000-00805f9b34fb";
-    const OTA_SERVICE_UUID = "0000221f-0000-1000-8000-00805f9b34fb";
-    const OTA_CHARACTERISTIC_UUID = "0000331f-0000-1000-8000-00805f9b34fb";
-    const OTA_BANK_START = 0x20000;
-    const OTA_MAX_SIZE = 0x20000;
-
-    const connectionEl = document.querySelector("#connection");
-    const connectButton = document.querySelector("#connect");
-    const disconnectButton = document.querySelector("#disconnect");
-    const syncButton = document.querySelector("#sync");
-    const firmwareFile = document.querySelector("#firmware-file");
-    const uploadButton = document.querySelector("#upload");
-    const otaProgress = document.querySelector("#ota-progress");
-    const clockEl = document.querySelector("#clock");
-    const dateEl = document.querySelector("#date");
-    const logEl = document.querySelector("#log");
-
-    let device;
-    let timeCharacteristic;
-    let otaCharacteristic;
-    let selectedFirmware;
-    let otaNotificationResolver;
-    let uploading = false;
-
-    function updateClock() {
-      const now = new Date();
-      clockEl.textContent = new Intl.DateTimeFormat([], {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false
-      }).format(now);
-      dateEl.textContent = new Intl.DateTimeFormat([], {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric"
-      }).format(now);
-    }
-
-    function log(message, isError = false) {
-      logEl.textContent = message;
-      logEl.classList.toggle("error", isError);
-    }
-
-    function setConnected(connected) {
-      connectionEl.textContent = connected ? "CONNECTED" : "DISCONNECTED";
-      connectionEl.classList.toggle("connected", connected);
-      syncButton.disabled = !connected;
-      uploadButton.disabled = !connected || !selectedFirmware || uploading;
-      disconnectButton.disabled = !connected || uploading;
-      connectButton.textContent = connected ? "Reconnect watch" : "Connect watch";
-    }
-
-    function onDisconnected() {
-      timeCharacteristic = undefined;
-      otaCharacteristic = undefined;
-      setConnected(false);
-      if (!uploading) {
-        log("Watch disconnected.");
-      }
-    }
-
-    async function connect() {
-      if (!navigator.bluetooth) {
-        throw new Error(
-          "Web Bluetooth is unavailable. On iPhone, open this page in Bluefy."
-        );
-      }
-
-      log("Choose MAOWATCH in the Bluetooth picker…");
-      device = await navigator.bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: [SERVICE_UUID, OTA_SERVICE_UUID]
-      });
-
-      device.addEventListener("gattserverdisconnected", onDisconnected);
-      const server = await device.gatt.connect();
-      const service = await server.getPrimaryService(SERVICE_UUID);
-      timeCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
-      const otaService = await server.getPrimaryService(OTA_SERVICE_UUID);
-      otaCharacteristic = await otaService.getCharacteristic(OTA_CHARACTERISTIC_UUID);
-      await otaCharacteristic.startNotifications();
-      otaCharacteristic.addEventListener(
-        "characteristicvaluechanged",
-        event => {
-          if (otaNotificationResolver) {
-            otaNotificationResolver(new Uint8Array(event.target.value.buffer.slice(0)));
-            otaNotificationResolver = undefined;
-          }
-        }
-      );
-
-      setConnected(true);
-      log(`Connected to ${device.name || "MAOWATCH"}. Ready to synchronize.`);
-    }
-
-    function disconnect() {
-      if (device?.gatt?.connected) {
-        device.gatt.disconnect();
-      } else {
-        onDisconnected();
-      }
-    }
-
-    function makeTimePacket(now = new Date()) {
-      // The firmware derives HH:MM from epoch % 86400, so it expects an epoch
-      // shifted to local wall-clock time instead of an ordinary UTC epoch.
-      const localEpoch = (
-        Math.floor(now.getTime() / 1000) -
-        now.getTimezoneOffset() * 60
-      ) >>> 0;
-      const year = now.getFullYear();
-
-      return new Uint8Array([
-        0xdd,
-        (localEpoch >>> 24) & 0xff,
-        (localEpoch >>> 16) & 0xff,
-        (localEpoch >>> 8) & 0xff,
-        localEpoch & 0xff,
-        (year >>> 8) & 0xff,
-        year & 0xff,
-        now.getMonth() + 1,
-        now.getDate(),
-        now.getDay()
-      ]);
-    }
-
-    function toHex(bytes) {
-      return [...bytes]
-        .map(value => value.toString(16).padStart(2, "0"))
-        .join(" ")
-        .toUpperCase();
-    }
-
-    async function write(bytes) {
-      if (typeof timeCharacteristic.writeValueWithResponse === "function") {
-        await timeCharacteristic.writeValueWithResponse(bytes);
-      } else {
-        await timeCharacteristic.writeValue(bytes);
-      }
-    }
-
-    async function writeOta(bytes) {
-      if (!otaCharacteristic) {
-        throw new Error("OTA characteristic is unavailable.");
-      }
-      if (typeof otaCharacteristic.writeValueWithResponse === "function") {
-        await otaCharacteristic.writeValueWithResponse(bytes);
-      } else {
-        await otaCharacteristic.writeValue(bytes);
-      }
-    }
-
-    function addressBytes(command, address) {
-      return new Uint8Array([
-        command,
-        (address >>> 24) & 0xff,
-        (address >>> 16) & 0xff,
-        (address >>> 8) & 0xff,
-        address & 0xff
-      ]);
-    }
-
-    function firmwareChecksum(bytes) {
-      let checksum = 0;
-      for (let index = 0; index < OTA_MAX_SIZE; index++) {
-        checksum = (checksum + (index < bytes.length ? bytes[index] : 0xff)) & 0xffff;
-      }
-      return checksum;
-    }
-
-    function waitForOtaNotification(timeoutMs = 10000) {
-      return new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          otaNotificationResolver = undefined;
-          reject(new Error("Timed out waiting for the OTA checksum."));
-        }, timeoutMs);
-        otaNotificationResolver = value => {
-          clearTimeout(timeout);
-          resolve(value);
-        };
-      });
-    }
-
-    async function uploadFirmware() {
-      if (!selectedFirmware || !otaCharacteristic) {
-        throw new Error("Select firmware and connect to MAOWATCH first.");
-      }
-
-      const bytes = selectedFirmware;
-      const checksum = firmwareChecksum(bytes);
-      uploading = true;
-      otaProgress.value = 0;
-      setConnected(true);
-      firmwareFile.disabled = true;
-      syncButton.disabled = true;
-
-      try {
-        log(`Erasing OTA bank · checksum ${checksum.toString(16).padStart(4, "0").toUpperCase()}…`);
-        for (let address = OTA_BANK_START; address < OTA_BANK_START + OTA_MAX_SIZE; address += 0x1000) {
-          await writeOta(addressBytes(0x01, address));
-          otaProgress.value = ((address - OTA_BANK_START) / OTA_MAX_SIZE) * 10;
-        }
-
-        for (let offset = 0; offset < bytes.length; offset += 0x100) {
-          const page = bytes.subarray(offset, Math.min(offset + 0x100, bytes.length));
-          for (let part = 0; part < page.length; part += 240) {
-            const chunk = page.subarray(part, Math.min(part + 240, page.length));
-            const packet = new Uint8Array(chunk.length + 1);
-            packet[0] = 0x03;
-            packet.set(chunk, 1);
-            await writeOta(packet);
-          }
-          await writeOta(addressBytes(0x02, OTA_BANK_START + offset));
-          otaProgress.value = 10 + ((offset + page.length) / bytes.length) * 80;
-        }
-
-        // Populate the existing firmware's final-check buffer without changing
-        // firmware: stage expected CRC at offsets 5/6, copy it to out_buffer,
-        // then ask the watch to calculate and notify its flash checksum.
-        await writeOta(new Uint8Array([
-          0x03, 0, 0, 0, 0, 0, (checksum >>> 8) & 0xff, checksum & 0xff
-        ]));
-        await writeOta(addressBytes(0x05, 0));
-        const notification = waitForOtaNotification();
-        await writeOta(new Uint8Array([0x06]));
-        const result = await notification;
-        const remoteChecksum = (result[1] << 8) | result[2];
-        if (result[0] !== 0x07 || remoteChecksum !== checksum) {
-          throw new Error(
-            `OTA checksum mismatch: watch ${remoteChecksum.toString(16).padStart(4, "0")}, file ${checksum.toString(16).padStart(4, "0")}.`
-          );
-        }
-
-        otaProgress.value = 95;
-        log("Checksum verified. Installing firmware; the watch will reboot…");
-        await writeOta(new Uint8Array([
-          0x07, 0xc0, 0x01, 0xce, 0xed,
-          (checksum >>> 8) & 0xff, checksum & 0xff
-        ]));
-        otaProgress.value = 100;
-      } finally {
-        uploading = false;
-        firmwareFile.disabled = false;
-        setConnected(Boolean(device?.gatt?.connected));
-      }
-    }
-
-    async function syncTime() {
-      if (!timeCharacteristic) {
-        throw new Error("Connect to MAOWATCH first.");
-      }
-
-      const packet = makeTimePacket();
-      syncButton.disabled = true;
-      log(`Sending ${toHex(packet)}…`);
-
-      await write(packet);
-      await write(new Uint8Array([0xe2]));
-
-      updateClock();
-      syncButton.disabled = false;
-      log(`Time synchronized. Sent: ${toHex(packet)} · refresh: E2`);
-    }
-
-    connectButton.addEventListener("click", async () => {
-      try {
-        await connect();
-      } catch (error) {
-        setConnected(false);
-        log(error.message || String(error), true);
-      }
-    });
-
-    disconnectButton.addEventListener("click", disconnect);
-
-    syncButton.addEventListener("click", async () => {
-      try {
-        await syncTime();
-      } catch (error) {
-        syncButton.disabled = !timeCharacteristic;
-        log(error.message || String(error), true);
-      }
-    });
-
-    firmwareFile.addEventListener("change", async () => {
-      selectedFirmware = undefined;
-      otaProgress.value = 0;
-      const file = firmwareFile.files[0];
-      if (!file) {
-        setConnected(Boolean(device?.gatt?.connected));
-        return;
-      }
-
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      const signature = String.fromCharCode(...bytes.slice(8, 12));
-      if (signature !== "KNLT") {
-        firmwareFile.value = "";
-        setConnected(Boolean(device?.gatt?.connected));
-        log("Not a Telink firmware .bin: KNLT signature is missing.", true);
-        return;
-      }
-      if (bytes.length > OTA_MAX_SIZE) {
-        firmwareFile.value = "";
-        setConnected(Boolean(device?.gatt?.connected));
-        log(`Firmware is too large (${bytes.length} bytes; maximum ${OTA_MAX_SIZE}).`, true);
-        return;
-      }
-
-      selectedFirmware = bytes;
-      setConnected(Boolean(device?.gatt?.connected));
-      log(`Selected ${file.name} · ${bytes.length} bytes.`);
-    });
-
-    uploadButton.addEventListener("click", async () => {
-      try {
-        await uploadFirmware();
-      } catch (error) {
-        log(error.message || String(error), true);
-      }
-    });
-
-    updateClock();
-    setInterval(updateClock, 1000);
-  </script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+  <script src="js/maowatch_studio.js"></script>
 </body>
 </html>
