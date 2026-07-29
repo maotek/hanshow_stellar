@@ -20,16 +20,31 @@ enum PSR_FLAGS
 #define SCAN_DIRECTION (SCAN_UP | RES_128x296 | FORMAT_BWR | \
                         BOOSTER_ON | RESET_NONE | LUT_OTP | SHIFT_RIGHT)
 
+static uint8_t EPD_BWY_350_power_on_and_read_temp(void)
+{
+    uint8_t temperature;
+
+    // Explicitly enable the internal sensor with zero calibration offset.
+    EPD_WriteCmd(0x41);
+    EPD_WriteData(0x00);
+
+    // Power-on performs the UC8151C one-shot temperature conversion.
+    EPD_WriteCmd(0x04);
+    WaitMs(1);
+    EPD_CheckStatus(100);
+
+    EPD_WriteCmd(0x40);
+    EPD_CheckStatus(100);
+    temperature = EPD_SPI_read();
+    EPD_SPI_read();
+    return temperature;
+}
+
 _attribute_ram_code_ uint8_t EPD_BWY_350_read_temp(void)
 {
     uint8_t temperature;
 
-    EPD_WriteCmd(0x04);
-    WaitMs(1);
-
-    EPD_WriteCmd(0x40);
-    temperature = EPD_SPI_read();
-    EPD_SPI_read();
+    temperature = EPD_BWY_350_power_on_and_read_temp();
 
     EPD_WriteCmd(0x02);
     EPD_WriteCmd(0x07);
@@ -44,21 +59,17 @@ _attribute_ram_code_ uint8_t EPD_BWY_350_Display(
     uint8_t temperature;
     int i;
 
-    (void)full_or_partial;
-
-    EPD_WriteCmd(0x04);
-    WaitMs(1);
+    temperature = EPD_BWY_350_power_on_and_read_temp();
 
     // Use the controller's native OTP geometry and waveform selection.
     EPD_WriteCmd(0x00);
     EPD_WriteData(SCAN_DIRECTION);
 
-    EPD_WriteCmd(0x40);
-    WaitMs(1);
-    temperature = EPD_SPI_read();
-    EPD_SPI_read();
-
-    // Match the known-working sequence: clear both SRAM planes first.
+    // The panel's OTP contains a full three-color waveform. UC8151C's
+    // partial-window commands do not supply a fast partial waveform and
+    // cause red/black contamination on this panel, so always use the
+    // known-good full refresh sequence.
+    (void)full_or_partial;
     EPD_WriteCmd(0x10);
     for (i = 0; i < size; i++)
         EPD_WriteData(0x00);
