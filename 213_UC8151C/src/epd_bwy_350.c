@@ -65,10 +65,15 @@ _attribute_ram_code_ uint8_t EPD_BWY_350_Display(
     EPD_WriteCmd(0x00);
     EPD_WriteData(SCAN_DIRECTION);
 
-    // The panel's OTP contains a full three-color waveform. UC8151C's
-    // partial-window commands do not supply a fast partial waveform and
-    // cause red/black contamination on this panel, so always use the
-    // known-good full refresh sequence.
+    // The panel's OTP contains its temperature-compensated three-color
+    // waveform. PTIN/PTL only restrict the driven area; they do not select a
+    // fast waveform. GxEPD2 likewise uses the normal slow OTP refresh for
+    // UC8151 colour panels. Its experimental black/white LUT needs valid old
+    // and new frame buffers, which are lost when this firmware resets and
+    // power-cycles the controller before every update. Do not select that LUT
+    // without adding persistent previous-frame storage and panel-specific
+    // waveform validation: using it as an ordinary colour partial refresh
+    // causes the observed red/black contamination.
     (void)full_or_partial;
     EPD_WriteCmd(0x10);
     for (i = 0; i < size; i++)

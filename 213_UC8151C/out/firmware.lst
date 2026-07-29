@@ -29083,8 +29083,8 @@ Disassembly of section .rodata:
    12f44:	00000000 	tandeq	r0, r0, r0
    12f48:	574f414d 	tstorerbpl	r4, [pc, -sp, asr #2]
    12f4c:	48435441 	tstormmdami	r3, {r0, r6, sl, ip, lr}^
-   12f50:	44535320 	tloadrbmi	r5, [r3], #-800	; 0x320
-   12f54:	31383631 	teqcc	r8, r1, lsr r6
+   12f50:	38435520 	tstormmdacc	r3, {r5, r8, sl, ip, lr}^
+   12f54:	43313531 	teqmi	r1, #205520896	; 0xc400000
    12f58:	00000000 	tandeq	r0, r0, r0
    12f5c:	64323025 	tloadrtvs	r3, [r2], #-37	; 0x25
    12f60:	3230252e 	txorscc	r2, r0, #192937984	; 0xb800000

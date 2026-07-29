@@ -209,7 +209,7 @@ _attribute_ram_code_ void epd_display(struct date_time _time, uint16_t battery_m
     battery_level = get_battery_level(battery_mv);
 
     // Compact header leaves a comfortable margin on the 2.13-inch panel.
-    sprintf(buff, "MAOWATCH SSD1681");
+    sprintf(buff, "MAOWATCH UC8151C");
     // obdWriteString uses 8-pixel text rows, not pixel Y coordinates.
     obdWriteString(&obd, 0, 61, 1, (char *)buff, FONT_8x8, 0, 1);
 
