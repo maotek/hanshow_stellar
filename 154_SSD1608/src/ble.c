@@ -36,7 +36,9 @@ RAM my_fifo_t blt_txfifo = {
 	blt_txfifo_b,
 };
 
-RAM uint8_t ble_name[] = {9, 0x09, 'M', 'A', 'O', 'W', 'A', 'T', 'C', 'H'};
+RAM uint8_t ble_name[] = {
+	12, 0x09, 'M', 'A', 'O', 'W', 'A', 'T', 'C', 'H', '-', '0', '0'
+};
 
 RAM uint8_t advertising_data[] = {
 	/*Description*/ 16, 0x16, 0x1a, 0x18,
@@ -144,6 +146,11 @@ void init_ble(void)
 	advertising_data[7] = mac_public[2];
 	advertising_data[8] = mac_public[1];
 	advertising_data[9] = mac_public[0];
+
+	// Append the final displayed MAC byte as two hexadecimal digits.
+	static const char hex[] = "0123456789ABCDEF";
+	ble_name[11] = hex[(mac_public[0] >> 4) & 0x0f];
+	ble_name[12] = hex[mac_public[0] & 0x0f];
 
 	////// Controller Initialization  //////////
 	blc_ll_initBasicMCU();					   // must

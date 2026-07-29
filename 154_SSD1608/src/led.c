@@ -27,6 +27,7 @@ _attribute_ram_code_ void init_led(void)
     gpio_set_input_en(LED_GREEN, 0);
 }
 
+
 _attribute_ram_code_ void set_led_color(uint8_t color)
 {
     switch (color)
