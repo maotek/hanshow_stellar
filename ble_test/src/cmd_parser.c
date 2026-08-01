@@ -69,7 +69,7 @@ void cmd_parser(void * p){
 	else if(inData == 0xE2){// force set an EPD scene
 		set_EPD_wait_flush();
 	}
-	else if(inData == 0xE3){// RGB LED mask: R=bit0, G=bit1, B=bit2
+	else if(inData == LED_CMD_SET_MASK){// RGB LED mask: R=bit0, G=bit1, B=bit2
 		set_led_mask(req->dat[1] & 0x07);
 	}
 }

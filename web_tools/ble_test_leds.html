@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MAOWATCH BLE Test LEDs</title>
+  <style>
+    :root{color-scheme:light;--paper:#ece9df;--ink:#181916;--muted:#686960;--line:#aaa99f;--accent:#d9ff49}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;padding:24px;background:linear-gradient(135deg,#d7d4ca,var(--paper));color:var(--ink);font:15px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    main{width:min(680px,100%);margin:auto;border:2px solid var(--ink);border-radius:22px;background:#f4f2e9;box-shadow:9px 10px 0 var(--ink);overflow:hidden}
+    header{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:18px 22px;border-bottom:2px solid var(--ink)}h1{margin:0;font-size:1rem;letter-spacing:.1em}#status{color:var(--muted);font-size:.75rem}#status.on{color:#167640}
+    .content{display:grid;gap:16px;padding:22px}.panel{padding:17px;border:1px solid var(--line);border-radius:14px;background:#ffffff70}h2{margin:0 0 7px;font-size:1rem}p{margin:0 0 14px;color:var(--muted);font-size:.75rem;line-height:1.5}
+    .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}.three{grid-template-columns:repeat(3,1fr)}button{min-height:45px;border:2px solid var(--ink);border-radius:10px;background:transparent;color:inherit;font:inherit;font-weight:700;cursor:pointer}button.primary{background:var(--ink);color:var(--paper)}button:disabled{opacity:.35;cursor:not-allowed}button:not(:disabled):active{transform:translateY(2px)}.red.active{background:#ef4940}.green.active{background:#38b96e}.blue.active{background:#438cff;color:white}
+    .presets{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}.picker{display:grid;grid-template-columns:100px 1fr;gap:16px;align-items:center}input[type=color]{width:100px;height:100px;padding:4px;border:2px solid var(--ink);border-radius:12px;background:white}.hex{font-size:1.3rem;font-weight:700}.preview{height:18px;margin-top:9px;border:1px solid var(--ink);border-radius:99px}#log{padding:14px 18px;border-top:1px solid var(--line);color:var(--muted);font-size:.72rem}.error{color:#a72f29!important}
+    @media(max-width:540px){body{padding:0;background:var(--paper)}main{border-left:0;border-right:0;border-radius:0;box-shadow:none}.content{padding:14px 11px}.three,.presets{grid-template-columns:1fr 1fr}.picker{grid-template-columns:1fr}input[type=color]{width:100%;height:80px}}
+  </style>
+</head>
+<body>
+<main>
+  <header><h1>MAOWATCH / LED TEST</h1><span id="status">DISCONNECTED</span></header>
+  <div class="content">
+    <section class="panel">
+      <h2>Connection</h2><p>Flash the firmware from <code>ble_test</code>, then connect through Web Bluetooth.</p>
+      <div class="grid"><button id="connect" class="primary">Connect</button><button id="disconnect" disabled>Disconnect</button></div>
+    </section>
+    <section class="panel">
+      <h2>LED channels</h2><p>Toggle the three active-low GPIO LEDs independently.</p>
+      <div class="grid three">
+        <button class="channel red" data-bit="1" disabled>Red · OFF</button>
+        <button class="channel green" data-bit="2" disabled>Green · OFF</button>
+        <button class="channel blue" data-bit="4" disabled>Blue · OFF</button>
+      </div>
+      <div class="presets">
+        <button class="preset" data-mask="0" disabled>Off</button><button class="preset" data-mask="7" disabled>White</button>
+        <button class="preset" data-mask="3" disabled>Yellow</button><button class="preset" data-mask="5" disabled>Magenta</button>
+        <button class="preset" data-mask="6" disabled>Cyan</button><button class="preset" data-mask="1" disabled>Red</button>
+        <button class="preset" data-mask="2" disabled>Green</button><button class="preset" data-mask="4" disabled>Blue</button>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>RGB picker</h2><p>The LEDs are digital, so each RGB component at 50% or higher becomes ON; there is no brightness control.</p>
+      <div class="picker"><input id="color" type="color" value="#ffffff" disabled><div><div id="hex" class="hex">#FFFFFF</div><div id="mapping">R ON · G ON · B ON</div><div id="preview" class="preview"></div></div></div>
+      <button id="apply" class="primary" style="width:100%;margin-top:12px" disabled>Apply RGB selection</button>
+    </section>
+  </div>
+  <div id="log" role="status">Ready. Use Chrome or Edge with Web Bluetooth.</div>
+</main>
+<script>
+"use strict";
+const SERVICE="00001f10-0000-1000-8000-00805f9b34fb",CHARACTERISTIC="00001f1f-0000-1000-8000-00805f9b34fb",LED_COMMAND=0xE3;
+const $=s=>document.querySelector(s),channels=[...document.querySelectorAll(".channel")],controls=[...document.querySelectorAll(".channel,.preset"),$("#color"),$("#apply")];let device,writer,mask=0,writePending=false;
+function log(s,error=false){$("#log").textContent=s;$("#log").classList.toggle("error",error)}
+function connection(on){$("#status").textContent=on?"CONNECTED":"DISCONNECTED";$("#status").classList.toggle("on",on);$("#connect").disabled=on;$("#disconnect").disabled=!on;controls.forEach(x=>x.disabled=!on)}
+function render(){channels.forEach(b=>{const on=!!(mask&+b.dataset.bit),name=b.classList.contains("red")?"Red":b.classList.contains("green")?"Green":"Blue";b.classList.toggle("active",on);b.textContent=`${name} · ${on?"ON":"OFF"}`})}
+async function send(next){if(!writer)throw Error("Connect to ble_test first.");if(writePending)return;writePending=true;const nextMask=next&7,data=new Uint8Array([LED_COMMAND,nextMask]);controls.forEach(x=>x.disabled=true);try{const write=writer.writeValueWithResponse?writer.writeValueWithResponse(data):writer.writeValue(data);await Promise.race([write,new Promise((_,reject)=>setTimeout(()=>reject(Error("LED write timed out; reconnect and try again.")),3000))]);mask=nextMask;render();log(`Sent E3 ${mask.toString(16).padStart(2,"0").toUpperCase()}`)}finally{writePending=false;if(writer)controls.forEach(x=>x.disabled=false)}}
+async function connect(){if(!navigator.bluetooth)throw Error("Web Bluetooth is unavailable in this browser.");device=await navigator.bluetooth.requestDevice({acceptAllDevices:true,optionalServices:[SERVICE]});device.addEventListener("gattserverdisconnected",()=>{writer=undefined;connection(false);log("Disconnected; the current LED state remains active.")});const server=await device.gatt.connect(),service=await server.getPrimaryService(SERVICE);writer=await service.getCharacteristic(CHARACTERISTIC);mask=0;render();connection(true);log(`Connected to ${device.name||"MAOWATCH"}.`)}
+function colorMask(){const v=$("#color").value;return(parseInt(v.slice(1,3),16)>=128?1:0)|(parseInt(v.slice(3,5),16)>=128?2:0)|(parseInt(v.slice(5,7),16)>=128?4:0)}
+function showColor(){const v=$("#color").value.toUpperCase(),m=colorMask();$("#hex").textContent=v;$("#mapping").textContent=`R ${m&1?"ON":"OFF"} · G ${m&2?"ON":"OFF"} · B ${m&4?"ON":"OFF"}`;$("#preview").style.background=v}
+$("#connect").onclick=()=>connect().catch(e=>log(e.message,true));$("#disconnect").onclick=()=>device?.gatt?.disconnect();channels.forEach(b=>b.onclick=()=>send(mask^+b.dataset.bit).catch(e=>log(e.message,true)));document.querySelectorAll(".preset").forEach(b=>b.onclick=()=>send(+b.dataset.mask).catch(e=>log(e.message,true)));$("#color").oninput=showColor;$("#apply").onclick=()=>send(colorMask()).catch(e=>log(e.message,true));showColor();render();connection(false);
+</script>
+</body>
+</html>

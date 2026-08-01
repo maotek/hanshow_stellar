@@ -46,7 +46,8 @@ static const u16 my_appearanceUIID = GATT_UUID_APPEARANCE;
 
 static const u16 my_periConnParamUUID = GATT_UUID_PERI_CONN_PARAM;
 
-static const u16 my_appearance = 0x03c1; // HID keyboard
+/* Do not let Windows claim the single BLE connection as a keyboard. */
+static const u16 my_appearance = GAP_APPEARE_UNKNOWN;
 
 static const u16 my_gattServiceUUID = SERVICE_UUID_GENERIC_ATTRIBUTE;
 

@@ -38,9 +38,7 @@ RAM my_fifo_t blt_txfifo = {
 };
 
 RAM uint8_t ble_name[] = {
-	12, 0x09, 'M', 'A', 'O', 'W', 'A', 'T', 'C', 'H', '-', '0', '0',
-	3, 0x03, 0x12, 0x18,       // HID service UUID
-	3, 0x19, 0xc1, 0x03        // HID keyboard appearance
+	12, 0x09, 'M', 'A', 'O', 'W', 'A', 'T', 'C', 'H', '-', '0', '0'
 };
 
 RAM uint8_t advertising_data[] = {
@@ -83,7 +81,8 @@ _attribute_ram_code_ void ble_disconnect_callback(uint8_t e, uint8_t *p, int n)
 {
 	ble_connected = 0;
 	ota_started = 0;
-	set_led_mask(0);
+	/* Keep the selected LED state across transient Web-BLE disconnects.
+	   Clear it with E3 00 or by resetting the device. */
 	printf("BLE disconnected\r\n");
 }
 
@@ -173,11 +172,9 @@ void init_ble(void)
 	extern void my_att_init();
 	my_att_init(); // gatt initialization
 	blc_l2cap_register_handler(blc_l2cap_packet_receive);
-	blc_smp_setSecurityParamters(Bondable_Mode, 0, 0, 0,
-								  IO_CAPABILITY_NO_INPUT_NO_OUTPUT);
-	blc_smp_setSecurityLevel(LE_Security_Mode_1_Level_2);
-	blc_smp_configSecurityRequestSending(SecReq_IMM_SEND,
-									SecReq_IMM_SEND, 0);
+	/* Web/LED testing must not trigger Windows HID pairing. The HID service
+	   remains in ble_test, but the normal custom services stay unencrypted. */
+	blc_smp_setSecurityLevel(No_Security);
 
 	///////////////////// USER application initialization ///////////////////
 	bls_ll_setScanRspData((uint8_t *)ble_name, sizeof(ble_name));
